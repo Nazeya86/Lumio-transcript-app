@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Meeting Notes Summarizer</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #fff;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        h1 { font-size: 2rem; font-weight: 700; color: #1f2937; text-align: center; margin-bottom: 1rem; }
+        .section-title { font-size: 1.25rem; font-weight: 600; color: #4b5563; }
+        textarea {
+            width: 100%; min-height: 150px; padding: 1rem; border-radius: 8px; border: 1px solid #d1d5db;
+            resize: vertical; font-size: 1rem; line-height: 1.5; transition: border-color 0.2s ease-in-out;
+        }
+        textarea:focus {
+            outline: none; border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+        }
+        input[type="text"] { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #d1d5db; font-size: 1rem; }
+        button {
+            padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: #fff;
+            background-color: #3b82f6; border: none; border-radius: 8px; cursor: pointer;
+            transition: background-color 0.2s ease-in-out; width: 100%;
+        }
+        button:hover { background-color: #2563eb; }
+        #summary-output { background-color: #f9fafb; min-height: 250px; border: 1px dashed #d1d5db; }
+        .loading-spinner { display: none; text-align: center; font-size: 1.1rem; color: #6b7280; }
+        #email-section { display: flex; flex-direction: column; gap: 1rem; }
+        .message-box { display: none; padding: 1rem; border-radius: 8px; font-weight: 600; text-align: center; margin-top: 1rem; }
+        .message-box.success { background-color: #d1fae5; color: #065f46; }
+        .message-box.error { background-color: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Meeting Notes Summarizer</h1>
+
+        <div class="input-section">
+            <label class="section-title" for="transcript-input">Meeting Transcript</label>
+            <textarea id="transcript-input" placeholder="Paste your meeting notes or transcript here..."></textarea>
+        </div>
+
+        <div class="input-section">
+            <label class="section-title" for="prompt-input">Custom Instruction/Prompt</label>
+            <textarea id="prompt-input" placeholder="e.g., 'Summarize in bullet points for executives' or 'Highlight only action items'"></textarea>
+        </div>
+
+        <button id="generate-btn">Generate Summary</button>
+
+        <div id="loading-spinner" class="loading-spinner"><p>Generating summary...</p></div>
+
+        <div class="output-section">
+            <label class="section-title" for="summary-output">Generated Summary (Editable)</label>
+            <textarea id="summary-output" readonly></textarea>
+        </div>
+
+        <div id="email-section">
+            <label class="section-title" for="email-input">Share via Email</label>
+            <input type="text" id="email-input" placeholder="Enter recipient email addresses (comma-separated)">
+            <button id="send-btn">Send Email</button>
+        </div>
+
+        <div id="message-box" class="message-box"></div>
+    </div>
+
+    <script>
+        const transcriptInput = document.getElementById('transcript-input');
+        const promptInput = document.getElementById('prompt-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const summaryOutput = document.getElementById('summary-output');
+        const emailInput = document.getElementById('email-input');
+        const sendBtn = document.getElementById('send-btn');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const messageBox = document.getElementById('message-box');
+
+        function showMessage(message, isError = false) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('success', 'error');
+            messageBox.classList.add(isError ? 'error' : 'success');
+            messageBox.style.display = 'block';
+        }
+
+        function showLoading() { loadingSpinner.style.display = 'block'; generateBtn.disabled = true; sendBtn.disabled = true; }
+        function hideLoading() { loadingSpinner.style.display = 'none'; generateBtn.disabled = false; sendBtn.disabled = false; }
+
+        // Generate Summary
+        generateBtn.addEventListener('click', () => {
+            const transcript = transcriptInput.value.trim();
+            const prompt = promptInput.value.trim();
+
+            if (!transcript) return showMessage('Please enter a meeting transcript.', true);
+
+            showMessage(''); 
+            showLoading();
+
+            fetch('http://127.0.0.1:5000/generate_summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transcript, prompt })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) showMessage(data.error, true);
+                else {
+                    summaryOutput.value = data.summary;
+                    summaryOutput.readOnly = false;
+                    summaryOutput.style.border = '1px solid #3b82f6';
+                    summaryOutput.style.backgroundColor = '#fff';
+                    hideLoading();
+                    showMessage('Summary generated successfully!');
+                }
+            })
+            .catch(err => { hideLoading(); showMessage('Error connecting to server', true); });
+        });
+
+        // Send Email
+        sendBtn.addEventListener('click', () => {
+            const summary = summaryOutput.value.trim();
+            const emails = emailInput.value.trim();
+
+            if (!summary) return showMessage('Please generate a summary before sending.', true);
+            if (!emails) return showMessage('Please enter at least one recipient email.', true);
+
+            showMessage('');
+            showLoading();
+
+            fetch('http://127.0.0.1:5000/send_email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ summary, recipients: emails })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) showMessage(data.error, true);
+                else {
+                    hideLoading();
+                    showMessage('Email sent successfully!');
+                    transcriptInput.value = '';
+                    promptInput.value = '';
+                    summaryOutput.value = '';
+                    emailInput.value = '';
+                }
+            })
+            .catch(err => { hideLoading(); showMessage('Error connecting to server', true); });
+        });
+    </script>
+</body>
+</html>
